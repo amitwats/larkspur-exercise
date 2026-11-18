@@ -302,6 +302,95 @@ EXTRA_TOOLS: List[Dict[str, Any]] = [
             "required": [],
         },
     },
+    {
+        "name": "care_entitlements",
+        "description": (
+            "Answers one question: does this customer get a meal, a hotel or ground transport "
+            "while they wait? Returns only the care part of the policy (meal, hotel, ground), "
+            "each with a plain reason why it is or is not covered. Meal amounts reflect the "
+            "customer's loyalty tier; the tier is read from the booking, never passed in.\n\n"
+            "Call this tool when the customer's flight is delayed, cancelled or diverted and "
+            "they ask about care, for example:\n"
+            "- 'Do I get a meal or a hotel while I wait?'\n"
+            "- 'Will the airline pay for a hotel tonight?'\n"
+            "Call it even for a short delay: 'no entitlement, and here is why' is a valid "
+            "answer the customer should hear.\n\n"
+            "Do NOT call this tool for rebooking, refunds, goodwill credits or compensation; "
+            "use check_policy for those. Do not call it before you have the cause_code, "
+            "delay_minutes and status from get_flight_status; never take them from the "
+            "customer's words.\n\n"
+            "A hotel is never confirmed by this tool. Where it is eligible, the result says "
+            "approval is human_one_click: tell the customer a hotel will be proposed for "
+            "approval, never that it is booked."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pnr": {
+                    "type": "string",
+                    "description": "The booking reference whose flight is disrupted.",
+                },
+                "cause_code": {
+                    "type": "string",
+                    "description": "Cause of the disruption, from get_flight_status. "
+                                   "WX/ATC/SEC are outside Larkspur's control; MX/CREW are within it.",
+                    "enum": ["WX", "ATC", "MX", "CREW", "SEC"],
+                },
+                "delay_minutes": {
+                    "type": "integer",
+                    "description": "Current estimated departure delay in minutes, from "
+                                   "get_flight_status. Pass 0 when status is CANCELLED or DIVERTED.",
+                },
+                "status": {
+                    "type": "string",
+                    "description": "Status of the disrupted flight, from get_flight_status.",
+                    "enum": ["ON_TIME", "DELAYED", "CANCELLED", "DIVERTED"],
+                },
+                "wait_minutes_for_alternative": {
+                    "type": "integer",
+                    "description": "Minutes until the departure of the alternative flight the "
+                                   "customer chose. Needed for a meal on cancelled or diverted "
+                                   "flights; omit it if no alternative is chosen yet.",
+                },
+            },
+            "required": ["pnr", "cause_code", "delay_minutes", "status"],
+        },
+    },
+    {
+        "name": "cause_in_plain_words",
+        "description": (
+            "Gives the reason behind a disruption in words the customer can repeat: the "
+            "customer-facing name of the cause (for example 'weather' or 'an aircraft "
+            "maintenance issue'), in the customer's language. Returns the label and the "
+            "wording rule for how to say it.\n\n"
+            "Call this tool when the customer asks why their flight was cancelled, delayed or "
+            "diverted, for example:\n"
+            "- 'Why was my flight cancelled?'\n"
+            "- 'What happened? I need to explain it to my boss.'\n\n"
+            "It explains the reason only. It does not say what the customer is owed or can "
+            "do about it.\n\n"
+            "Use the cause_code from get_flight_status, never one guessed from the customer's "
+            "words. Use the customer's language from their booking. Say the returned label "
+            "as it is and follow the returned wording rule: do not add detail about the "
+            "cause or blame anyone for it."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cause_code": {
+                    "type": "string",
+                    "description": "Cause of the disruption, from get_flight_status.",
+                    "enum": ["WX", "ATC", "MX", "CREW", "SEC"],
+                },
+                "language": {
+                    "type": "string",
+                    "description": "The customer's language, from their booking.",
+                    "enum": ["en", "es"],
+                },
+            },
+            "required": ["cause_code", "language"],
+        },
+    },
 ]  # ✏️ Build 2, step 2.1: schemas for the tools you add
 
 
@@ -388,7 +477,82 @@ def reopen_stats(intent_label: str = None) -> Dict[str, Any]:
             "overall_reopen_rate": round(reopened / len(rows), 2), "by_intent": by_kind}
 
 
+def care_entitlements(pnr: str, cause_code: str, delay_minutes: int, status: str,
+                      wait_minutes_for_alternative: int = None) -> Dict[str, Any]:
+    """Care part (meal, hotel, ground) of check_policy, each with a plain why / why not.
+    Tier and overnight are re-derived from the booking by check_policy, not passed in."""
+    from support import tools as support_tools
+    p = support_tools.check_policy(pnr, cause_code, delay_minutes, status,
+                                   wait_minutes_for_alternative=wait_minutes_for_alternative)
+    if "error" in p:
+        return p
+    care = p["care"]
+    controllable = p["cause_class"] == "controllable"
+    cause_txt = "within Larkspur's control" if controllable else "outside Larkspur's control"
+    ctx = "%s, %s (policy row %s)" % (status.lower(), cause_txt, p["policy_row_id"])
+
+    meal, hotel, ground = care["meal"], care["hotel"], care["ground"]
+    if meal.get("conditional"):
+        meal_why = ("%s: a $%s meal credit applies only if the wait for the alternative is %s "
+                    "minutes or more, and no alternative is chosen yet."
+                    % (ctx, meal["amount_usd"], meal["threshold_minutes"]))
+    elif meal.get("amount_usd"):
+        meal_why = "%s: meal credit of $%s, tier bonus included." % (ctx, meal["amount_usd"])
+    else:
+        meal_why = "%s: the wait is below the threshold for a meal credit." % ctx
+
+    if hotel.get("eligible"):
+        hotel_why = ("%s: overnight away from home, so a hotel up to $%s for %s night is "
+                     "eligible. It is only proposed; a human approves it (%s)."
+                     % (ctx, hotel["nightly_cap_usd"], hotel["nights"], hotel["approval"]))
+    elif hotel.get("instead"):
+        hotel_why = ("%s: no hotel is covered for this cause. Instead: %s."
+                     % (ctx, hotel["instead"]))
+    else:
+        hotel_why = ("%s: no hotel. Either this is not an overnight away from home, or this "
+                     "row does not cover hotels." % ctx)
+
+    if ground.get("amount_usd"):
+        ground_why = "%s: ground transport credit of $%s." % (ctx, ground["amount_usd"])
+        if ground.get("rule"):
+            ground_why += " Rule: " + ground["rule"]
+    else:
+        ground_why = "%s: no ground transport credit." % ctx
+
+    return {
+        "source": "disruption_policy.json v%s, Handbook section 6" % p["policy_version"],
+        "policy_row_id": p["policy_row_id"],
+        "meal": {**meal, "why": meal_why},
+        "hotel": {**hotel, "why": hotel_why},
+        "ground": {**ground, "why": ground_why},
+        "customer_explainer": p["explainer"],
+        "escalate": p["escalate"],
+    }
+
+
+def cause_in_plain_words(cause_code: str, language: str) -> Dict[str, Any]:
+    """Customer-facing name of a disruption cause (cause_labels_customer), plus the
+    policy's cause_attribution rule for how to say it."""
+    from support import mock_backend as backend
+    policy = backend.load_policy()
+    labels = policy["cause_labels_customer"]
+    if cause_code not in labels:
+        return {"error": "Unknown cause_code %r. Known: %s." % (cause_code, ", ".join(labels))}
+    if language not in labels[cause_code]:
+        return {"error": "No wording in language %r. Available: %s."
+                         % (language, ", ".join(labels[cause_code]))}
+    return {
+        "source": "disruption_policy.json v%s, cause_labels_customer" % policy["version"],
+        "cause_code": cause_code,
+        "language": language,
+        "label": labels[cause_code][language],
+        "wording_rule": policy["customer_wording"]["cause_attribution"],
+    }
+
+
 LOCAL_TOOLS: Dict[str, Any] = {  # ✏️ Build 2, step 2.1: the functions behind them
+    "cause_in_plain_words": cause_in_plain_words,
+    "care_entitlements": care_entitlements,
     "next_available_day": next_available_day,  # was reversed (function: "name"); dispatch looks up by name
     "hold_time_left": hold_time_left,
     "what_automation_will_not_do": what_automation_will_not_do,

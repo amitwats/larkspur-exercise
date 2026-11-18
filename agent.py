@@ -74,11 +74,74 @@ EXTRA_TOOLS: List[Dict[str, Any]] = [
                 },
                 "required": ["origin", "dest", "cabin", "date"],
             },
-        }
+        },
+    {
+        "name": "hold_time_left",
+        "description": (
+            "Check how long a seat hold has before it is released. Use it when the customer "
+            "asks how long they have to decide, or before reminding them to press Confirm. "
+            "Only works after hold_seat in this conversation: pass the hold_id it returned. "
+            "Returns minutes_left, the expiry time and whether the hold has already expired. "
+            "Never estimate the time left from memory."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "hold_id": {"type": "string", "description": "The hold_id that hold_seat returned, e.g. HOLD-3F9A1C."},
+            },
+            "required": ["hold_id"],
+        },
+    },
+    {
+        "name": "what_automation_will_not_do",
+        "description": (
+            "Return Larkspur's Handbook section 7: the list of things this chat is not allowed "
+            "to do (refunds, fare-difference collection, hotel approval, other-airline "
+            "rebooking, groups of 10+, unaccompanied minors, partner flights, pets, medical, "
+            "baggage tracing). Call it when the customer asks you to do something you are "
+            "unsure you may do, such as 'just cancel the whole trip' or 'refund me now', so "
+            "you can explain in Larkspur's own words why a person handles it, then hand over "
+            "with escalate_to_human. Needs no input."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
 ]  # ✏️ Build 2, step 2.1: schemas for the tools you add
-LOCAL_TOOLS: Dict[str, Any] = {
-    next_available_day:"next_available_day"
-}  # ✏️ Build 2, step 2.1: the functions behind them
+
+
+def hold_time_left(hold_id: str) -> Dict[str, Any]:
+    """Minutes left on a seat hold, measured against the fixture clock (the pack's 'now')."""
+    from support import mock_backend as backend
+    hold = backend._holds.get(hold_id)
+    if hold is None:
+        return {"error": f"No active hold {hold_id}. It may have been confirmed, expired, or never placed."}
+    seconds = (hold["expires_at"] - backend.FIXTURE_CLOCK).total_seconds()
+    return {
+        "hold_id": hold_id,
+        "option_id": hold["option_id"],
+        "expires_at": hold["expires_at"].isoformat(),
+        "now": backend.FIXTURE_CLOCK.isoformat(),
+        "minutes_left": max(0, int(seconds // 60)),
+        "expired": seconds <= 0,
+    }
+
+
+def what_automation_will_not_do() -> Dict[str, Any]:
+    """Section 7 of the Handbook, verbatim: what chat automation hands to people."""
+    from support import mock_backend as backend
+    text = (backend.DATA_DIR / "fare_rules_excerpt.md").read_text(encoding="utf-8")
+    start = text.find("### 7.")
+    if start < 0:
+        return {"error": "Handbook section 7 not found in fare_rules_excerpt.md"}
+    end = text.find("\n### ", start + 1)
+    return {"source": "Handbook v14.3, section 7",
+            "text": text[start:] if end < 0 else text[start:end].strip()}
+
+
+LOCAL_TOOLS: Dict[str, Any] = {  # ✏️ Build 2, step 2.1: the functions behind them
+    "next_available_day": next_available_day,  # was reversed (function: "name"); dispatch looks up by name
+    "hold_time_left": hold_time_left,
+    "what_automation_will_not_do": what_automation_will_not_do,
+}
 
 
 def text_of(response) -> str:

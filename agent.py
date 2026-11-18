@@ -65,17 +65,21 @@ def run_agent(pnr: str, last_name: str, message: str) -> str:            # ✏�
         thinking={"type": "adaptive"}, tools=tools, messages=messages,
     )
 
-    answer = ""
+    HANDOVER_TEXT = "I've pulled together what I can on this, and I'm passing you over to a human travel specialist to take it from here."
     turns = 1
     while response.stop_reason == "tool_use" and turns < MAX_TOOL_CALLS:
-        messages.append({"role": "assistant", "content": text_of(response)})
+        messages.append({"role": "assistant", "content": response.content})
         messages.append({"role": "user", "content": tool_results(response)})
-        answer = text_of(response)
         response = client.messages.create(
             model=MODEL, max_tokens=4096, system=runtime_preamble() + SYSTEM_PROMPT + TONE_ADDENDUM,
             thinking={"type": "adaptive"}, tools=tools, messages=messages,
         )
         turns += 1
+        final_text = text_of(response)
+        if response.stop_reason != "tool_use" and final_text and final_text.strip():
+            answer = final_text
+        else:
+            answer =HANDOVER_TEXT
 
     return answer
 
@@ -119,14 +123,24 @@ def build_tools() -> List[Dict[str, Any]]:                 # ✏️ Build 1, ste
                 "type": "object",
                 "properties": {
                     "flight_no": {"type": "string"},
-                    "date": {"type": "string", "description": "MM/DD/YYYY"},
+                    "date": {"type": "string", "description": "YYYY-MM-DD"},
                 },
                 "required": ["flight_no", "date"],
             },
         },
         {
             "name": "search_alternatives",
-            "description": "search",
+            "description": "Find rebooking options for the disrupted segment on a Larkspur reservation. "
+            "Returns up to a few ranked options on Larkspur and Larkspur Link flights, each with "
+            "an option_id, flight number, departure/arrival times, cabin and seat availability, "
+            "and the wait in minutes from the original departure. Call this after "
+            "get_flight_status confirms the disruption and before check_policy, so you can pass "
+            "the wait time and chosen option into the policy check. This is read-only. It does "
+            "not hold or book anything. Present the options to the customer and let them choose; "
+            "do not pick one for them. Pass the option_id you get back to hold_seat. If it "
+            "returns no options, or only partner-carrier options, escalate_to_human rather than "
+            "improvising. Not for groups, unaccompanied minors, or segments flagged out of scope "
+            "by lookup_booking.",
             "input_schema": {
                 "type": "object",
                 "properties": {"pnr": {"type": "string"}},
@@ -159,7 +173,7 @@ def build_tools() -> List[Dict[str, Any]]:                 # ✏️ Build 1, ste
         },
         {
             "name": "hold_seat",
-            "description": "Place a 15-minute hold on one alternative. Reversible. It simply expires.",
+            "description": "Place a 15-minute hold on one alternative returned by search_alternatives. Returns a hold_id, which confirm_rebooking needs. Reversible: it expires on its own, so it is safe to use while the customer decides. Only one option at a time. Tell the customer the hold expires in 15 minutes",
             "input_schema": {
                 "type": "object",
                 "properties": {"option_id": {"type": "string"}, "pnr": {"type": "string"}},

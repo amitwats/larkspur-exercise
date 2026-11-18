@@ -105,6 +105,73 @@ EXTRA_TOOLS: List[Dict[str, Any]] = [
         ),
         "input_schema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "fare_rules",
+        "description": (
+            "Read the exact Larkspur Handbook text (v14.3, sections 4 to 7) behind an "
+            "entitlement, so you can explain WHY something is or is not covered, for "
+            "example 'Why do I not get a hotel?', 'Why only $15 for a meal?', 'Why can't "
+            "you refund me here?'. Call it after check_policy, when the customer asks "
+            "for the reason or the rule, and quote or paraphrase the returned text "
+            "instead of explaining from memory. Sections: 4 fare families (what Basic, "
+            "Main, Main Plus and First allow); 5 when we delay, cancel or divert "
+            "(rebooking window, refunds, diversions); 6 care while you wait (meal, "
+            "hotel, ground transport, goodwill, by within/outside our control); 7 what "
+            "chat automation will not do (what goes to a person). Returns that "
+            "section's full text. It is reference reading, not a decision: what this "
+            "customer is owed still comes from check_policy."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "section": {
+                    "type": "string",
+                    "description": (
+                        "Which Handbook section to read: a number '4' to '7', or words "
+                        "from its title, e.g. 'fare families', 'when we delay', "
+                        "'care while you wait', 'chat automation'. Hotel, meal and "
+                        "goodwill questions are section 6."
+                    ),
+                },
+            },
+            "required": ["section"],
+        },
+    },
+    {
+        "name": "reopen_stats",
+        "description": (
+            "Answer 'Is this problem going to come back?' from Larkspur's own history: "
+            "how often each kind of disruption contact, handled by a human agent, "
+            "was reopened by the customer within 72 hours, and the recorded reason it "
+            "came back. Call it when the customer worries the issue will recur or "
+            "asks whether they will have to contact Larkspur again, so you can name "
+            "the usual follow-up problem (e.g. a missing confirmation email or refund "
+            "reference) and head it off. Optional intent_label narrows to one kind of "
+            "problem; omit it to get every kind. Returns, per intent_label: contacts, "
+            "reopened count, reopen rate, and reopen reasons, plus the sample size. "
+            "The sample is small (8 transcripts from Jan to Feb 2025): describe it as "
+            "past experience, never as a promise or a probability for this customer."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "intent_label": {
+                    "type": "string",
+                    "description": (
+                        "Kind of problem to filter on. Omit for all kinds. Pick the one "
+                        "closest to this customer's situation."
+                    ),
+                    "enum": [
+                        "rebook_after_cancellation", "compensation_hotel_request",
+                        "status_anxiety", "missed_connection", "refund_vs_credit",
+                        "compensation_goodwill", "voluntary_change_due_to_delay",
+                        "baggage_after_rebooking",
+                    ],
+                },
+            },
+            "required": [],
+        },
+    },
 ]  # ✏️ Build 2, step 2.1: schemas for the tools you add
 
 
@@ -137,10 +204,66 @@ def what_automation_will_not_do() -> Dict[str, Any]:
             "text": text[start:] if end < 0 else text[start:end].strip()}
 
 
+
+
+def fare_rules(section: str) -> Dict[str, Any]:
+    """Return one section of data/americas/fare_rules_excerpt.md, verbatim."""
+    import os, re
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "data", "americas", "fare_rules_excerpt.md")
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    sections = []
+    for chunk in text.split("\n### ")[1:]:
+        heading, _, body = chunk.partition("\n")
+        m = re.match(r"^(\d+)\.\s*(.*)$", heading.strip())
+        sections.append({"number": m.group(1) if m else "", "title": m.group(2) if m else heading,
+                         "text": "### " + heading.strip() + "\n" + body.strip()})
+    available = ", ".join("%s (%s)" % (s["number"], s["title"]) for s in sections)
+    query = re.sub(r"^section\s+", "", (section or "").strip().lower()).rstrip(".")
+    for s in sections:
+        if query == s["number"]:
+            return {"section": s["number"], "text": s["text"]}
+    for s in sections:
+        if query and query in s["title"].lower():
+            return {"section": s["number"], "text": s["text"]}
+    return {"error": "No section matches %r. Available sections: %s." % (section, available)}
+
+
+def reopen_stats(intent_label: str = None) -> Dict[str, Any]:
+    """72-hour reopen rates by intent_label, from data/americas/transcripts_sample.jsonl."""
+    import json, os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "data", "americas", "transcripts_sample.jsonl")
+    with open(path, encoding="utf-8") as fh:
+        rows = [json.loads(line) for line in fh if line.strip()]
+    if intent_label:
+        rows = [r for r in rows if r.get("intent_label") == intent_label]
+        if not rows:
+            return {"error": "No transcripts with intent_label %r." % intent_label}
+    by_kind: Dict[str, Dict[str, Any]] = {}
+    for r in rows:
+        k = by_kind.setdefault(r["intent_label"], {"contacts": 0, "reopened_within_72h": 0,
+                                                   "reopen_reasons": []})
+        k["contacts"] += 1
+        if r.get("reopened_within_72h"):
+            k["reopened_within_72h"] += 1
+            if r.get("reopen_reason"):
+                k["reopen_reasons"].append(r["reopen_reason"])
+    for k in by_kind.values():
+        k["reopen_rate"] = round(k["reopened_within_72h"] / k["contacts"], 2)
+    reopened = sum(k["reopened_within_72h"] for k in by_kind.values())
+    return {"source": "transcripts_sample.jsonl (human-handled contacts, Jan-Feb 2025)",
+            "sample_size": len(rows), "reopened_within_72h": reopened,
+            "overall_reopen_rate": round(reopened / len(rows), 2), "by_intent": by_kind}
+
+
 LOCAL_TOOLS: Dict[str, Any] = {  # ✏️ Build 2, step 2.1: the functions behind them
     "next_available_day": next_available_day,  # was reversed (function: "name"); dispatch looks up by name
     "hold_time_left": hold_time_left,
     "what_automation_will_not_do": what_automation_will_not_do,
+    "fare_rules": fare_rules,
+    "reopen_stats": reopen_stats,
 }
 
 

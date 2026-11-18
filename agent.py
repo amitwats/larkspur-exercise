@@ -68,15 +68,15 @@ def run_agent(pnr: str, last_name: str, message: str) -> str:            # ✏�
     answer = ""
     turns = 1
     while response.stop_reason == "tool_use" and turns < MAX_TOOL_CALLS:
-        messages.append({"role": "assistant", "content": text_of(response)})
+        messages.append({"role": "assistant", "content": response.content})
         messages.append({"role": "user", "content": tool_results(response)})
-        answer = text_of(response)
         response = client.messages.create(
             model=MODEL, max_tokens=4096, system=runtime_preamble() + SYSTEM_PROMPT + TONE_ADDENDUM,
             thinking={"type": "adaptive"}, tools=tools, messages=messages,
         )
-        turns += 1
+        answer = text_of(response)
 
+        turns += 1
     return answer
 
 
@@ -119,14 +119,22 @@ def build_tools() -> List[Dict[str, Any]]:                 # ✏️ Build 1, ste
                 "type": "object",
                 "properties": {
                     "flight_no": {"type": "string"},
-                    "date": {"type": "string", "description": "MM/DD/YYYY"},
+                    "date": {"type": "string", "description": "Local departure date, YYYY-MM-DD (e.g. 2025-05-08), as it appears on the booking segment"},
                 },
                 "required": ["flight_no", "date"],
             },
         },
         {
             "name": "search_alternatives",
-            "description": "search",
+            "description": (
+                "Find rebooking options for the disrupted segment on this booking: other "
+                "Larkspur flights on the same route and cabin, with enough seats for every "
+                "passenger, excluding the disrupted flight. Each option has an option_id, "
+                "times, live status, seats available and fare difference. Call it after "
+                "lookup_booking and get_flight_status have confirmed the disruption, and "
+                "before offering the customer any new flight; never invent options. Pass "
+                "the chosen option_id to hold_seat or to check_policy."
+            ),
             "input_schema": {
                 "type": "object",
                 "properties": {"pnr": {"type": "string"}},

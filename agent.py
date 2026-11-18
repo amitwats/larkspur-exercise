@@ -28,10 +28,57 @@ MAX_TOOL_CALLS = (
 )
 
 TONE_ADDENDUM = ""  # ✏️ Build 4, step 4.1, intelligence goal
-EXTRA_TOOLS: List[
-    Dict[str, Any]
-] = []  # ✏️ Build 2, step 2.1: schemas for the tools you add
-LOCAL_TOOLS: Dict[str, Any] = {}  # ✏️ Build 2, step 2.1: the functions behind them
+EXTRA_TOOLS: List[Dict[str, Any]] = [
+     {
+            "name": "next_available_day",
+            "description": (
+                "Finds the earliest date on or after a given date when at least one flight "
+                "with available seats exists for a route and cabin. Returns the first "
+                "available day, not a full list of flights or prices.\n\n"
+                "Call this tool when the customer's flight was cancelled and they want to "
+                "know the soonest they can fly from origin to destination, for example:\n"
+                "- 'My flight was cancelled, what's the next day I can get out?'\n"
+                "- 'When is the first day I can fly from DEL to BLR?'\n\n"
+                "Do NOT call this tool when:\n"
+                "- The flight is only delayed, or has already been rescheduled.\n"
+                "- The customer wants to book a flight.\n"
+                "- The customer asks about the status of a flight or booking.\n"
+                "- The question is about refunds, baggage, check-in, compensation or other "
+                "policies.\n"
+                "- Origin, destination, cabin or date is missing or ambiguous. Ask the "
+                "customer first; never guess.\n\n"
+                "The date is the starting point of the search: the cancelled flight's date, "
+                "or the date the customer asks to start from."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "origin": {
+                        "type": "string",
+                        "description": "Origin airport code of the cancelled flight.",
+                    },
+                    "dest": {
+                        "type": "string",
+                        "description": "Destination airport code the customer wants to reach.",
+                    },
+                    "cabin": {
+                        "type": "string",
+                        "description": "The customer's chosen cabin: Y for main, J for first.",
+                        "enum": ["Y", "J"],
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "Earliest date to start searching from, YYYY-MM-DD.",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    },
+                },
+                "required": ["origin", "dest", "cabin", "date"],
+            },
+        }
+]  # ✏️ Build 2, step 2.1: schemas for the tools you add
+LOCAL_TOOLS: Dict[str, Any] = {
+    next_available_day:"next_available_day"
+}  # ✏️ Build 2, step 2.1: the functions behind them
 
 
 def text_of(response) -> str:

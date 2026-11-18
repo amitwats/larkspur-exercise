@@ -27,6 +27,86 @@ MAX_TOOL_CALLS = (
     8  # Larkspur's own build capped the loop here; then a human takes over.
 )
 
+# ---- local tool functions (flights.csv / bookings.json) -------------------------
+
+def _mins(hhmm: str) -> int:
+    h, m = hhmm.split(":")
+    return int(h) * 60 + int(m)
+
+
+def departures_in_window(airport: str, date: str, start_time: str, end_time: str) -> Dict[str, Any]:
+    """Non-cancelled flights leaving `airport` on `date` whose scheduled or delay-adjusted
+    departure falls between start_time and end_time (local HH:MM)."""
+    from support.mock_backend import load_flights, DATA_HORIZON_START, DATA_HORIZON_END
+    if not (DATA_HORIZON_START <= date <= DATA_HORIZON_END):
+        return {"error": f"No schedule data for {date}; data covers {DATA_HORIZON_START} to "
+                         f"{DATA_HORIZON_END}. That is a data limit, not proof that no flights run."}
+    try:
+        start, end = _mins(start_time), _mins(end_time)
+    except ValueError:
+        return {"error": f"start_time and end_time must be 24h HH:MM, got {start_time!r} and {end_time!r}."}
+
+    code = airport.strip().upper()
+    flights = []
+    for r in load_flights():
+        if r["origin"] != code or r["date"] != date or r["status"] == "CANCELLED":
+            continue
+        sched = _mins(r["sched_dep_local"])
+        expected = sched + r["delay_min"]
+        if start <= sched <= end or start <= expected <= end:
+            flights.append({
+                "flight_no": r["flight_no"], "dest": r["dest"], "status": r["status"],
+                "sched_dep_local": r["sched_dep_local"], "delay_min": r["delay_min"],
+                "expected_dep_local": f"{expected // 60 % 24:02d}:{expected % 60:02d}",
+                "seats_left_Y": r["seats_left_Y"], "seats_left_J": r["seats_left_J"],
+            })
+    flights.sort(key=lambda f: f["expected_dep_local"])
+    out: Dict[str, Any] = {"airport": code, "date": date, "window": f"{start_time}-{end_time}", "flights": flights}
+    if not flights:
+        out["message"] = f"No flights leave {code} on {date} between {start_time} and {end_time}."
+    return out
+
+
+def ground_stop_status(airport: str) -> Dict[str, Any]:
+    """Is `airport` in a ground stop at the fixture 'now'? Reads flights.csv remarks."""
+    import re
+    from datetime import datetime
+    from support.mock_backend import load_flights, load_bookings
+
+    code = airport.strip().upper()
+    now = datetime.fromisoformat(load_bookings()["fixture_clock"])
+    now_min = now.hour * 60 + now.minute
+    pat = re.compile(rf"\b{re.escape(code)}\s+(?:GDP then\s+)?ground stop(?:\s+(\d\d:\d\d)-(\d\d:\d\d)\s+(\w+))?")
+
+    window, mentioned = None, False
+    for r in load_flights():
+        if r["date"] != now.strftime("%Y-%m-%d"):
+            continue
+        m = pat.search(r["remarks"])
+        if m:
+            mentioned = True
+            if m.group(2):
+                window = m.groups()
+                break
+
+    out: Dict[str, Any] = {"airport": code, "now_local": now.strftime("%Y-%m-%d %H:%M")}
+    if not window:
+        out["status"] = "REPORTED_NO_WINDOW" if mentioned else "NONE_ON_RECORD"
+        out["message"] = ("A ground stop is mentioned but with no end time." if mentioned else
+                          f"No ground stop for {code} in the data for today. That does not guarantee the airport is clear.")
+        return out
+
+    start_s, end_s, tz = window
+    out["window"] = f"{start_s}-{end_s} {tz}"
+    if now_min < _mins(start_s):
+        out["status"] = "NOT_STARTED"
+    elif now_min <= _mins(end_s):
+        out["status"], out["minutes_remaining"] = "ACTIVE", _mins(end_s) - now_min
+    else:
+        out["status"] = "ENDED"
+    return out
+
+
 TONE_ADDENDUM = ""  # ✏️ Build 4, step 4.1, intelligence goal
 EXTRA_TOOLS: List[Dict[str, Any]] = [
      {
@@ -105,6 +185,56 @@ EXTRA_TOOLS: List[Dict[str, Any]] = [
         ),
         "input_schema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "departures_in_window",
+        "description": (
+            "Lists Larkspur flights departing from one airport on one date within a local time window, "
+            "from the schedule data (flights.csv). Per flight: number, destination, status, scheduled "
+            "and delay-adjusted departure, and seats left in Y and J. Cancelled flights are left out.\n\n"
+            "Call it when the customer wants to know which flights are departing from a location, "
+            "for example what is leaving an airport today, this afternoon or tomorrow.\n\n"
+            "Do NOT call it for the status of one specific flight (get_flight_status), for rebooking "
+            "this customer's reservation (search_alternatives), or to check whether an airport is "
+            "stopped (ground_stop_status). If the airport or date is unclear, ask the customer first.\n\n"
+            "'Now' in this data is 2025-05-08 14:10 Denver time, not the real clock: for 'today' or "
+            "'still', use date 2025-05-08 and start_time 14:10. Data covers 2025-05-07 to 2025-05-09 "
+            "only; outside that you get an error, not an empty list. An empty list means nothing is "
+            "scheduled in that window; offer to widen it."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "airport": {"type": "string", "description": "3-letter IATA origin code, e.g. DEN. Convert city names yourself."},
+                "date": {"type": "string", "description": "Local date YYYY-MM-DD. Today = 2025-05-08, tomorrow = 2025-05-09."},
+                "start_time": {"type": "string", "description": "Window start, 24h HH:MM. afternoon = 12:00, evening = 17:00, 'still' = 14:10."},
+                "end_time": {"type": "string", "description": "Window end, 24h HH:MM, not before start. afternoon = 17:59, rest of the day = 23:59."},
+            },
+            "required": ["airport", "date", "start_time", "end_time"],
+        },
+    },
+    {
+        "name": "ground_stop_status",
+        "description": (
+            "Says whether an airport is currently in an air-traffic ground stop and, if the data "
+            "gives a window, when it is currently expected to end. Reads flights.csv remarks and "
+            "judges them against the data's own 'now' (2025-05-08 14:10 Denver time, from "
+            "bookings.json), not the real clock. Returns status (ACTIVE, NOT_STARTED, ENDED, "
+            "REPORTED_NO_WINDOW or NONE_ON_RECORD), the window and minutes remaining.\n\n"
+            "Call it when the customer wants to know whether an airport or location is stopped, "
+            "or before telling a customer that a weather hold is over.\n\n"
+            "Do NOT call it for one customer's flight (get_flight_status) or for the list of flights "
+            "leaving an airport (departures_in_window). If the airport is unclear, ask first.\n\n"
+            "Do not pass a time. Say 'currently expected to end at', never 'will end'. "
+            "NONE_ON_RECORD means no stop in the data, not that the airport is certainly clear."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "airport": {"type": "string", "description": "3-letter IATA code, e.g. DEN. Convert city names yourself."},
+            },
+            "required": ["airport"],
+        },
+    },    
     {
         "name": "fare_rules",
         "description": (
@@ -264,6 +394,8 @@ LOCAL_TOOLS: Dict[str, Any] = {  # ✏️ Build 2, step 2.1: the functions behin
     "what_automation_will_not_do": what_automation_will_not_do,
     "fare_rules": fare_rules,
     "reopen_stats": reopen_stats,
+    "departures_in_window": departures_in_window,
+    "ground_stop_status": ground_stop_status,
 }
 
 

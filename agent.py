@@ -9,6 +9,8 @@ Where you edit:   grep -n '✏' agent.py   (six marks, one per place)
 Steps and gates:  https://anthropicpartnerbasecamp.bts.com/
 """
 from __future__ import annotations
+import csv
+from pathlib import Path
 from typing import Any, Dict, List
 from support import (MODEL, SYSTEM_PROMPT, call_local, execute_tool, mcp_client,
                      new_session, next_available_day, record_tool_result,
@@ -17,8 +19,51 @@ from support import (MODEL, SYSTEM_PROMPT, call_local, execute_tool, mcp_client,
 MAX_TOOL_CALLS = 8  # Larkspur's own build capped the loop here; then a human takes over.
 
 TONE_ADDENDUM = ""                       # ✏️ Build 4, step 4.1, intelligence goal
-EXTRA_TOOLS: List[Dict[str, Any]] = []   # ✏️ Build 2, step 2.1: schemas for the tools you add
-LOCAL_TOOLS: Dict[str, Any] = {}         # ✏️ Build 2, step 2.1: the functions behind them
+EXTRA_TOOLS: List[Dict[str, Any]] = [    # ✏️ Build 2, step 2.1: schemas for the tools you add
+    {
+        "name": "seats_left",
+        "description": (
+            "Call this when the user asks about seat availability for a particular flight "
+            "or destination. It reads flights.csv and returns seats left in both cabins "
+            "(Y and J), based on the flight number, date, origin and destination the user "
+            "gives. If several flights match, it returns all of them ordered by date. If "
+            "nothing matches, it says no seats are available for that option."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "flight_no": {"type": "string", "description": "Flight number the user asks about."},
+                "date": {"type": "string", "description": "Flight date in YYYY-MM-DD format."},
+                "origin": {"type": "string", "description": "Journey start location (airport code)."},
+                "dest": {"type": "string", "description": "Destination (airport code)."},
+            },
+            "required": [],
+        },
+    },
+]
+
+
+def seats_left(flight_no: str = "", date: str = "", origin: str = "", dest: str = "") -> Dict[str, Any]:
+    """Read flights.csv, filter on whatever was given, return both cabins by date."""
+    path = Path(__file__).parent / "data" / "americas" / "flights.csv"
+    wanted = {"flight_no": flight_no, "date": date, "origin": origin, "dest": dest}
+    wanted = {k: v.strip().upper() for k, v in wanted.items() if v and v.strip()}
+    if not wanted:
+        return {"error": "Give at least one of flight_no, date, origin or dest."}
+    with open(path, newline="", encoding="utf-8") as f:
+        rows = [r for r in csv.DictReader(f)
+                if all(r[k].upper() == v for k, v in wanted.items())]
+    if not rows:
+        return {"flights": [], "message": "No flight found for that option, so no seats are available."}
+    rows.sort(key=lambda r: (r["date"], r["sched_dep_local"]))
+    return {"flights": [{"flight_no": r["flight_no"], "date": r["date"],
+                         "origin": r["origin"], "dest": r["dest"],
+                         "status": r["status"],
+                         "seats_left_Y": int(r["seats_left_Y"]),
+                         "seats_left_J": int(r["seats_left_J"])} for r in rows]}
+
+
+LOCAL_TOOLS: Dict[str, Any] = {"seats_left": seats_left}   # ✏️ Build 2, step 2.1: the functions behind them
 
 
 def text_of(response) -> str:

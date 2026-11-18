@@ -11,6 +11,10 @@ teammate, starting with `- `. Commit the file once. Nobody else changes it.
 The review reads these names. Nothing else comes off the list. Your team still
 decides in the moment who does what.
 
-- <Name>
-- <Name>
-- <Name>
+- Amt Wats
+- Arpit Bansal
+- Mahendra Dewangan
+- Mohitkumar Yede
+- Ajit Kumar Partheeban
+- Dharshan N
+- Adithya Chandra Ts

@@ -7,8 +7,8 @@ Does: When a flight is cancelled or delayed, it explains what happened in plain 
 Number: About $0.07 per customer helped (31,001 input and 966 output tokens on average across 5 ticket types, at Sonnet 5.5 prices of $2 and $10 per million), against $6.90 for a person, so roughly 1% of today's cost.
 Safety check: Every ticket type in our eval cases must resolve or hand over to a human correctly before we ship, and the agent never rebooks without the customer's confirm.
 Next: Cut the cost further by caching the 6,400 tokens of tool definitions that we resend on every turn, then re-run bench.py to prove it.
-Still broken: The abusive-message ticket (R8KD3F) gets a calm, ordinary resolution with no tone handling at all, so the agent does not yet recognise or respond to abuse.
-Lever: cost
+Still broken: Abusive and legal-threat messages (R8KD3F) are escalated to a person correctly, but the escalation comes back with queue: null, so a human sees it in a default pile instead of a legal-complaints queue. Fix: set the queue in the escalate_to_human handler.
+Lever: speed
 
 ## Priya asked
 

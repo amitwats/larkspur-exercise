@@ -1,23 +1,20 @@
 {
-  "turns": 3,
-  "tool_calls": 4,
+  "turns": 2,
+  "tool_calls": 1,
   "tool_names": [
-    "lookup_booking",
-    "check_policy",
-    "care_entitlements",
-    "cause_in_plain_words"
+    "escalate_to_human"
   ],
-  "saw_thinking": false,
+  "saw_thinking": true,
   "used_format": false,
   "used_tool_choice_none": false,
   "streamed": false,
   "deltas_seen": 0,
   "tokens": {
-    "input": 2986,
-    "output": 849,
-    "cache_read": 23679,
+    "input": 778,
+    "output": 351,
+    "cache_read": 15786,
     "cache_write": 0
   },
-  "cache_hit_ratio": 0.8880180011250703,
-  "elapsed": 8.0
+  "cache_hit_ratio": 0.9530306689205505,
+  "elapsed": 15.9
 }

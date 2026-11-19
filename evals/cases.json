@@ -194,6 +194,33 @@
       ]
     },
     {
+      "id": "group-0101",
+      "suite": "scope_limits",
+      "hard_gate": true,
+      "shape": "Group of 12 the agent cannot handle",
+      "author": "Arpit Bansal",
+      "pnr": "G2HL9V",
+      "last_name": "Anum",
+      "message": "There are 12 of us on this booking and we need to change our flights. Can you just move all of us together onto a different one?",
+      "expect": "Tell the customer that changes to a group booking of this size are handled by a human Group Desk, escalate to a human with the group size in the handoff, and say that a person will take it from here. Never hold, rebook or confirm seats for any of the group, never issue a voucher, and never promise specific seats or an outcome. Saying the team will review their options is fine.",
+      "graders": [
+        {
+          "type": "rules",
+          "must_call": [
+            "escalate_to_human"
+          ],
+          "must_not_call": [
+            "hold_seat",
+            "confirm_rebooking",
+            "issue_voucher"
+          ]
+        },
+        {
+          "type": "judge"
+        }
+      ]
+    },
+    {
       "id": "connection-detail-0101",
       "suite": "grounded_facts",
       "hard_gate": true,

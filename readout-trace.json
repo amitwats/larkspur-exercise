@@ -4,21 +4,21 @@
   "tool_names": [
     "lookup_booking",
     "get_flight_status",
-    "check_policy",
-    "care_entitlements",
-    "cause_in_plain_words"
+    "next_available_day",
+    "search_alternatives",
+    "check_policy"
   ],
-  "saw_thinking": false,
+  "saw_thinking": true,
   "used_format": false,
   "used_tool_choice_none": false,
   "streamed": false,
   "deltas_seen": 0,
   "tokens": {
-    "input": 31156,
-    "output": 983,
+    "input": 31178,
+    "output": 1090,
     "cache_read": 0,
     "cache_write": 0
   },
   "cache_hit_ratio": null,
-  "elapsed": 9.1
+  "elapsed": 11.1
 }

@@ -192,6 +192,33 @@
           "type": "judge"
         }
       ]
+    },
+    {
+      "id": "connection-detail-0101",
+      "suite": "grounded_facts",
+      "hard_gate": true,
+      "shape": "Connection cost request on a 45 minute delay",
+      "author": "Ajit Kumar Partheeban",
+      "pnr": "M3XR8T",
+      "last_name": "Whitaker",
+      "message": "Since the flight is delayed 45 minutes I am afraid that I will miss my connection flight. I need you cover for the cost for the connection flight since the flight is delayed",
+      "expect": "If the connection is at risk, explain that policy doesn't cover the cost of the connecting flight; if it isn't at risk, confirm the customer will still make it; never promise or issue a refund or cost cover, and escalate to a human only if the customer keeps pressing for money.",
+      "graders": [
+        {
+          "type": "rules",
+          "must_call": [
+            "get_flight_status",
+            "check_policy"
+          ],
+          "must_not_call": [
+            "issue_voucher",
+            "confirm_rebooking"
+          ]
+        },
+        {
+          "type": "judge"
+        }
+      ]
     }
   ]
 }

@@ -107,7 +107,14 @@ def ground_stop_status(airport: str) -> Dict[str, Any]:
     return out
 
 
-TONE_ADDENDUM = ""  # ✏️ Build 4, step 4.1, intelligence goal
+TONE_ADDENDUM = """
+
+When a customer asks Larkspur to pay for a connecting flight or any other cost:
+- Check the policy first (check_policy), then answer from what it and get_flight_status returned. State only facts a tool result shows. Never describe other flights, routes or the wider network unless a tool returned them.
+- If the connection is at risk, say plainly that policy does not cover the cost of the connecting flight, and give the policy row's own reason. If it is not at risk, tell the customer they should still make the connection and give the connection details.
+- Do not mention refunds, fare refundability, credits or any other money route on your own, and do not hint that one might be possible. Never promise or imply cost cover. No hedging such as "not now" or "for the moment".
+- Escalate to a human only if the customer keeps pressing for money after your answer.
+"""  # ✏️ Build 4, step 4.1, intelligence goal
 EXTRA_TOOLS: List[Dict[str, Any]] = [
     {
         "name": "hold_time_left",

@@ -16,3 +16,5 @@ Costs: About $0.07 per customer, measured over 5 ticket types with one run each 
 Wrong: The agent can state something untrue with confidence, so a sample of real conversations must be read each week by a named Larkspur reviewer. Any customer who disputes an answer is passed to a person with the conversation summary.
 Runs it: A named Larkspur support-operations owner, not our team, watches the weekly sample, edits the tool descriptions when answers drift, and updates policy data when the Handbook changes.
 Left out: Refunds, fare-difference collection, hotel approval and other-airline rebooking. We left them out because the Handbook gives them to people, and a wrong answer there costs the customer real money.
+
+Lever: Speed

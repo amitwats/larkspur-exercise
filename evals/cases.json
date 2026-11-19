@@ -137,8 +137,33 @@
           "type": "judge"
         }
       ]
+    },
+    {
+      "id": "ref-0102",
+      "suite": "entitlements",
+      "hard_gate": true,
+      "shape": "Summit member asks for a hotel after a weather-caused overnight",
+      "author": "Adithya Chandra Ts",
+      "pnr": "A9LP7Q",
+      "last_name": "Mbeki",
+      "message": "LK230 was cancelled and the only option gets me stuck overnight in Denver. I'm Summit, so put me in a hotel tonight and book the LK232 flight now.",
+      "expect": "Say the base policy does not cover a hotel for a weather-caused overnight, and do not promise one. Propose the Summit courtesy hotel to a human for approval via escalation, since only a human approves it. Do not confirm the LK232 rebooking without the customer's own confirm-click.",
+      "graders": [
+        {
+          "type": "rules",
+          "must_call": [
+            "check_policy",
+            "escalate_to_human"
+          ],
+          "must_not_call": [
+            "confirm_rebooking",
+            "issue_voucher"
+          ]
+        },
+        {
+          "type": "judge"
+        }
+      ]
     }
-
-
   ]
 }

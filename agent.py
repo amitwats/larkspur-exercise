@@ -706,7 +706,7 @@ def build_tools() -> List[Dict[str, Any]]:  # ✏️ Build 1, step 1.3
         },
         {
             "name": "hold_seat",
-            "description": "Place a 15-minute hold on one alternative returned by search_alternatives. Returns a hold_id, which confirm_rebooking needs. Reversible: it expires on its own, so it is safe to use while the customer decides. Only one option at a time. Tell the customer the hold expires in 15 minutes",
+            "description": "Place a 15-minute hold on one alternative returned by search_alternatives. Returns a hold_id, which confirm_rebooking needs. Reversible: it expires on its own, so it is safe to use while the customer decides. Only one option at a time. Tell the customer the hold expires in 15 minutes. If the customer picks an option by number (\"option 2\") and you have not shown a list, call search_alternatives and take that position in the order it returns, hold it, and name the flight back so the customer can check it before their Confirm click. A hold is not a booking.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -758,7 +758,16 @@ def build_tools() -> List[Dict[str, Any]]:  # ✏️ Build 1, step 1.3
             "description": (
                 "Hand this conversation to a human, with your reasoning attached. Use for "
                 "groups, partner segments, unaccompanied minors, refunds, or anything else "
-                "out of scope. This is the correct outcome for those cases, not a failure."
+                "out of scope. This is the correct outcome for those cases, not a failure. "
+                "Also call it when check_policy marks what the customer asked for as possible "
+                "but not yours to grant: an approval of \"human_approve\", or a note that an "
+                "override may apply. Say you have passed it on, and do not promise it. "
+                "Do NOT call it when check_policy simply says no (eligible false, no override): "
+                "decline once, cite the policy_row_id and its reason, and do not hedge with "
+                "\"a person will look at it\". Escalate a declined request only if the customer "
+                "keeps pressing after you have said no. "
+                "In your reply, name every part of the request you are handing on and say each "
+                "one cannot be done in chat; if they asked to cancel and refund, say both."
             ),
             "input_schema": {
                 "type": "object",

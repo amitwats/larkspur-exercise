@@ -18,7 +18,7 @@ from support import (
     execute_tool,
     mcp_client,
     new_session,
-    next_available_day,
+    # next_available_day,
     record_tool_result,
     runtime_preamble,
 )
@@ -109,52 +109,6 @@ def ground_stop_status(airport: str) -> Dict[str, Any]:
 
 TONE_ADDENDUM = ""  # ✏️ Build 4, step 4.1, intelligence goal
 EXTRA_TOOLS: List[Dict[str, Any]] = [
-     {
-            "name": "next_available_day",
-            "description": (
-                "Finds the earliest date on or after a given date when at least one flight "
-                "with available seats exists for a route and cabin. Returns the first "
-                "available day, not a full list of flights or prices.\n\n"
-                "Call this tool when the customer's flight was cancelled and they want to "
-                "know the soonest they can fly from origin to destination, for example:\n"
-                "- 'My flight was cancelled, what's the next day I can get out?'\n"
-                "- 'When is the first day I can fly from DEL to BLR?'\n\n"
-                "Do NOT call this tool when:\n"
-                "- The flight is only delayed, or has already been rescheduled.\n"
-                "- The customer wants to book a flight.\n"
-                "- The customer asks about the status of a flight or booking.\n"
-                "- The question is about refunds, baggage, check-in, compensation or other "
-                "policies.\n"
-                "- Origin, destination, cabin or date is missing or ambiguous. Ask the "
-                "customer first; never guess.\n\n"
-                "The date is the starting point of the search: the cancelled flight's date, "
-                "or the date the customer asks to start from."
-            ),
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "origin": {
-                        "type": "string",
-                        "description": "Origin airport code of the cancelled flight.",
-                    },
-                    "dest": {
-                        "type": "string",
-                        "description": "Destination airport code the customer wants to reach.",
-                    },
-                    "cabin": {
-                        "type": "string",
-                        "description": "The customer's chosen cabin: Y for main, J for first.",
-                        "enum": ["Y", "J"],
-                    },
-                    "date": {
-                        "type": "string",
-                        "description": "Earliest date to start searching from, YYYY-MM-DD.",
-                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                    },
-                },
-                "required": ["origin", "dest", "cabin", "date"],
-            },
-        },
     {
         "name": "hold_time_left",
         "description": (
@@ -235,38 +189,38 @@ EXTRA_TOOLS: List[Dict[str, Any]] = [
             "required": ["airport"],
         },
     },    
-    {
-        "name": "fare_rules",
-        "description": (
-            "Read the exact Larkspur Handbook text (v14.3, sections 4 to 7) behind an "
-            "entitlement, so you can explain WHY something is or is not covered, for "
-            "example 'Why do I not get a hotel?', 'Why only $15 for a meal?', 'Why can't "
-            "you refund me here?'. Call it after check_policy, when the customer asks "
-            "for the reason or the rule, and quote or paraphrase the returned text "
-            "instead of explaining from memory. Sections: 4 fare families (what Basic, "
-            "Main, Main Plus and First allow); 5 when we delay, cancel or divert "
-            "(rebooking window, refunds, diversions); 6 care while you wait (meal, "
-            "hotel, ground transport, goodwill, by within/outside our control); 7 what "
-            "chat automation will not do (what goes to a person). Returns that "
-            "section's full text. It is reference reading, not a decision: what this "
-            "customer is owed still comes from check_policy."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "section": {
-                    "type": "string",
-                    "description": (
-                        "Which Handbook section to read: a number '4' to '7', or words "
-                        "from its title, e.g. 'fare families', 'when we delay', "
-                        "'care while you wait', 'chat automation'. Hotel, meal and "
-                        "goodwill questions are section 6."
-                    ),
-                },
-            },
-            "required": ["section"],
-        },
-    },
+    # {
+    #     "name": "fare_rules",
+    #     "description": (
+    #         "Read the exact Larkspur Handbook text (v14.3, sections 4 to 7) behind an "
+    #         "entitlement, so you can explain WHY something is or is not covered, for "
+    #         "example 'Why do I not get a hotel?', 'Why only $15 for a meal?', 'Why can't "
+    #         "you refund me here?'. Call it after check_policy, when the customer asks "
+    #         "for the reason or the rule, and quote or paraphrase the returned text "
+    #         "instead of explaining from memory. Sections: 4 fare families (what Basic, "
+    #         "Main, Main Plus and First allow); 5 when we delay, cancel or divert "
+    #         "(rebooking window, refunds, diversions); 6 care while you wait (meal, "
+    #         "hotel, ground transport, goodwill, by within/outside our control); 7 what "
+    #         "chat automation will not do (what goes to a person). Returns that "
+    #         "section's full text. It is reference reading, not a decision: what this "
+    #         "customer is owed still comes from check_policy."
+    #     ),
+    #     "input_schema": {
+    #         "type": "object",
+    #         "properties": {
+    #             "section": {
+    #                 "type": "string",
+    #                 "description": (
+    #                     "Which Handbook section to read: a number '4' to '7', or words "
+    #                     "from its title, e.g. 'fare families', 'when we delay', "
+    #                     "'care while you wait', 'chat automation'. Hotel, meal and "
+    #                     "goodwill questions are section 6."
+    #                 ),
+    #             },
+    #         },
+    #         "required": ["section"],
+    #     },
+    # },
     {
         "name": "reopen_stats",
         "description": (
@@ -553,10 +507,10 @@ def cause_in_plain_words(cause_code: str, language: str) -> Dict[str, Any]:
 LOCAL_TOOLS: Dict[str, Any] = {  # ✏️ Build 2, step 2.1: the functions behind them
     "cause_in_plain_words": cause_in_plain_words,
     "care_entitlements": care_entitlements,
-    "next_available_day": next_available_day,  # was reversed (function: "name"); dispatch looks up by name
+    # "next_available_day": next_available_day,  # was reversed (function: "name"); dispatch looks up by name
     "hold_time_left": hold_time_left,
     "what_automation_will_not_do": what_automation_will_not_do,
-    "fare_rules": fare_rules,
+    # "fare_rules": fare_rules,
     "reopen_stats": reopen_stats,
     "departures_in_window": departures_in_window,
     "ground_stop_status": ground_stop_status,
@@ -644,7 +598,7 @@ def run_agent(pnr: str, last_name: str, message: str) -> str:  # ✏️ Build 1,
 def tool_list() -> List[Dict[str, Any]]:  # ✏️ Build 2, step 2.2
     """Given. Exactly what Claude is offered on every turn; run.py --show-tools
     prints this list."""
-    return build_tools() + EXTRA_TOOLS
+    return build_tools() + EXTRA_TOOLS + mcp_client.tools()
 
 
 # ──────────────────────────────────────────────────────────────────────────────

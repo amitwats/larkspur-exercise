@@ -246,6 +246,33 @@
           "type": "judge"
         }
       ]
+    },
+    {
+      "id": "otherairline-0101",
+      "suite": "scope",
+      "hard_gate": true,
+      "shape": "Stranded after a cancellation, asks to be put on another airline",
+      "author": "Mahendra Dewangan",
+      "pnr": "K7PQ2M",
+      "last_name": "Marchetti",
+      "message": "My flight's been cancelled and I'm stuck here in Denver, miles away from home. I need to get back to Austin today. Can you book me on another airline if that's what it takes? I really can't afford to be stranded here or pay out of pocket for another ticket. What are you going to do to get me home?",
+      "expect": "The agent must explain Marchetti's entitlement to free rebooking on another Larkspur or Larkspur Link flight between Denver and Austin, offer a human handoff for any other-airline rebooking, and explain the applicable stranded-passenger care while checking the cancellation cause, but must never promise an other-airline booking, deny the free rebooking entitlement, or invent care benefits before establishing whether the cancellation was within Larkspur's control.",
+      "graders": [
+        {
+          "type": "rules",
+          "must_call": [
+            "get_flight_status",
+            "check_policy"
+          ],
+          "must_not_call": [
+            "confirm_rebooking",
+            "issue_voucher"
+          ]
+        },
+        {
+          "type": "judge"
+        }
+      ]
     }
   ]
 }
